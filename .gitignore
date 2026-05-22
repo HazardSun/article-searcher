@@ -1,0 +1,41 @@
+# Build output
+article_searcher/dist/
+article_searcher/build/
+*.spec
+
+# Portable copy
+article_searcher/dist-portable/
+
+# Archives and logs
+*.zip
+*.tar.gz
+exe_stderr.txt
+exe_stdout.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Model cache
+.huggingface/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Batch scripts (user-specific)
+*.bat
+
+# Python virtual environment
+venv/
+.venv/
+article_searcher/venv/
