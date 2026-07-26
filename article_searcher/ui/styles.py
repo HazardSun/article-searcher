@@ -26,6 +26,11 @@ QPushButton {
     font-weight: 500;
 }
 
+QPushButton:hover {
+    background-color: #262631;
+    border-color: #3a3a4a;
+}
+
 QPushButton:pressed {
     background-color: #4a4a5a;
     padding-top: 11px;
@@ -81,6 +86,17 @@ QLineEdit:focus {
 }
 
 QLineEdit::placeholder {
+    color: #6a6a7a;
+}
+
+/* 紧凑搜索框（已索引文件面板过滤输入） */
+QLineEdit#filter_input {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+QLineEdit#filter_input::placeholder {
     color: #6a6a7a;
 }
 
@@ -158,6 +174,33 @@ QListView::item:hover, QListWidget::item:hover {
 }
 
 QListView::item:selected, QListWidget::item:selected {
+    background-color: #2a2a35;
+    color: #ffffff;
+    border-color: #6366f1;
+}
+
+/* ===== 已索引文件列表 ===== */
+QListWidget#file_list {
+    background-color: #18181f;
+    color: #e8e8ed;
+    border: 1px solid #2a2a35;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#file_list::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#file_list::item:hover {
+    background-color: #22222c;
+}
+
+QListWidget#file_list::item:selected {
     background-color: #2a2a35;
     color: #ffffff;
     border-color: #6366f1;
@@ -456,6 +499,302 @@ QCheckBox::indicator:checked {
 QCheckBox::indicator:hover {
     border-color: #6366f1;
 }
+
+/* ===== 新增组件（功能1/2/3/4/13/14） ===== */
+/* 解析条件 chip 提示条（功能2） */
+QFrame#chip_bar {
+    background-color: transparent;
+}
+
+QPushButton#chip {
+    background-color: #2a2a35;
+    color: #a78bfa;
+    border: 1px solid #3a3a4a;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 12px;
+}
+
+QPushButton#chip:hover {
+    background-color: #3a3a4a;
+    border-color: #6366f1;
+}
+
+QLabel#warn_label {
+    color: #fbbf24;
+    font-size: 12px;
+    padding-right: 8px;
+}
+
+QPushButton#secondary {
+    background-color: #2a2a35;
+    color: #e8e8ed;
+    border: 1px solid #3a3a4a;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+QPushButton#secondary:hover {
+    background-color: #3a3a4a;
+}
+
+QListWidget#related_list {
+    background-color: #18181f;
+    color: #e8e8ed;
+    border: 1px solid #2a2a35;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#related_list::item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#related_list::item:hover {
+    background-color: #22222c;
+}
+
+QListWidget#related_list::item:selected {
+    background-color: #2a2a35;
+    color: #ffffff;
+    border-color: #6366f1;
+}
+
+QListWidget#launcher_list {
+    background-color: #18181f;
+    color: #e8e8ed;
+    border: 1px solid #2a2a35;
+    border-radius: 10px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#launcher_list::item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+}
+
+QListWidget#launcher_list::item:selected {
+    background-color: #2a2a35;
+    color: #ffffff;
+    border-color: #6366f1;
+}
+
+/* ===== 新增组件（功能5/7/8/9/11/15） ===== */
+QPushButton#star_btn {
+    background: transparent;
+    border: 1px solid #2a2a35;
+    border-radius: 6px;
+    font-size: 16px;
+    color: #fbbf24;
+}
+
+QPushButton#star_btn:hover {
+    background-color: #2a2a35;
+}
+
+QListWidget#source_list {
+    background-color: #18181f;
+    color: #e8e8ed;
+    border: 1px solid #2a2a35;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#source_list::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+}
+
+QListWidget#source_list::item:selected {
+    background-color: #2a2a35;
+    color: #ffffff;
+    border-color: #6366f1;
+}
+
+QPlainTextEdit#exclude_edit {
+    background-color: #1e1e26;
+    color: #e8e8ed;
+    border: 1px solid #2a2a35;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 13px;
+}
+
+QPlainTextEdit#exclude_edit:focus {
+    border-color: #6366f1;
+}
+
+/* 主题簇面板（紫色边框，与手动标签视觉隔离） */
+QLabel#cluster_section {
+    font-size: 14px;
+    font-weight: 600;
+    color: #c4b5fd;
+    padding: 6px 0 2px 0;
+    letter-spacing: 0.5px;
+}
+
+QListWidget#cluster_list {
+    background-color: #1a1626;
+    color: #e8e8ed;
+    border: 1px solid #7c3aed;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#cluster_list::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#cluster_list::item:hover {
+    background-color: #2a2440;
+}
+
+QListWidget#cluster_list::item:selected {
+    background-color: #3b2f63;
+    color: #ffffff;
+    border-color: #a78bfa;
+}
+
+QLabel#batch_count {
+    color: #a78bfa;
+    font-weight: 600;
+}
+
+/* 库概览仪表盘 */
+QFrame#stat_card {
+    background-color: #1e1e26;
+    border: 1px solid #2a2a35;
+    border-radius: 10px;
+}
+
+QLabel#stat_title {
+    color: #8a8a9a;
+    font-size: 12px;
+}
+
+QLabel#stat_value {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+QLabel#dash_section {
+    font-size: 14px;
+    font-weight: 600;
+    color: #a78bfa;
+    padding: 4px 0 2px 0;
+}
+
+QFrame#dash_block {
+    background-color: #18181f;
+    border: 1px solid #2a2a35;
+    border-radius: 10px;
+}
+
+QLabel#dash_key {
+    color: #a0a0b0;
+    font-size: 13px;
+}
+
+QLabel#dash_val {
+    color: #e8e8ed;
+    font-size: 13px;
+}
+
+/* ===== 新增组件（P2-6 链接图谱 / P2-12 重复检测） ===== */
+/* 链接图谱画布（QGraphicsView） */
+QGraphicsView#link_graph {
+    border: 1px solid #2a2a35;
+    border-radius: 12px;
+    background-color: #121218;
+}
+
+/* 出链 / 入链 列表 */
+QListWidget#link_list {
+    background-color: #18181f;
+    color: #e8e8ed;
+    border: 1px solid #2a2a35;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#link_list::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#link_list::item:hover {
+    background-color: #22222c;
+}
+
+QListWidget#link_list::item:selected {
+    background-color: #2a2a35;
+    color: #ffffff;
+    border-color: #6366f1;
+}
+
+/* 链接图谱 / 入出链 小标题（紫色系，与簇 #c4b5fd 协调） */
+QLabel#link_section {
+    font-size: 13px;
+    font-weight: 600;
+    color: #c4b5fd;
+    padding: 4px 0 2px 0;
+}
+
+/* 重复检测列表 */
+QListWidget#dup_list {
+    background-color: #18181f;
+    color: #e8e8ed;
+    border: 1px solid #2a2a35;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#dup_list::item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#dup_list::item:hover {
+    background-color: #22222c;
+}
+
+QListWidget#dup_list::item:selected {
+    background-color: #2a2a35;
+    color: #ffffff;
+    border-color: #a78bfa;
+}
+
+/* 重复检测阈值下拉（协同 device_selector 紫调） */
+QComboBox#dup_threshold {
+    background-color: #1a1a24;
+    border: 1px solid #3a3a4a;
+    font-weight: 600;
+    color: #a78bfa;
+}
+
+QComboBox#dup_threshold:hover {
+    border-color: #6366f1;
+}
 """
 
 LIGHT_THEME = """
@@ -511,6 +850,17 @@ QLineEdit, QTextEdit, QPlainTextEdit {
 
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
     border-color: #4f46e5;
+}
+
+/* 紧凑搜索框（已索引文件面板过滤输入） */
+QLineEdit#filter_input {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+QLineEdit#filter_input::placeholder {
+    color: #94a3b8;
 }
 
 QListView, QListWidget, QTreeView, QTreeWidget {
@@ -647,6 +997,430 @@ TagFilterWidget QLineEdit#tag_search {
 }
 
 TagFilterWidget QLineEdit#tag_search:focus {
+    border-color: #4f46e5;
+}
+
+/* ===== 浅色主题补全：标签 ===== */
+QLabel#title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.5px;
+}
+
+QLabel#subtitle {
+    font-size: 13px;
+    color: #64748b;
+}
+
+QLabel#section {
+    font-size: 14px;
+    font-weight: 600;
+    color: #4f46e5;
+    padding: 6px 0 2px 0;
+    letter-spacing: 0.5px;
+}
+
+/* ===== 浅色主题补全：组合框 ===== */
+QComboBox {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    min-width: 80px;
+}
+
+QComboBox:hover {
+    border-color: #94a3b8;
+}
+
+QComboBox::drop-down {
+    border: none;
+    padding-right: 8px;
+    width: 20px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    selection-background-color: #4f46e5;
+    selection-color: #ffffff;
+    outline: none;
+}
+
+QComboBox#device_selector {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    font-weight: 600;
+    color: #4f46e5;
+}
+
+QComboBox#device_selector:hover {
+    border-color: #4f46e5;
+}
+
+/* ===== 浅色主题补全：进度条 / 工具提示 / 复选框 ===== */
+QProgressBar {
+    background-color: #e2e8f0;
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    color: transparent;
+}
+
+QToolTip {
+    background-color: #1e293b;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 12px;
+}
+
+QCheckBox {
+    color: #1a1a2e;
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    background-color: #ffffff;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #4f46e5;
+    border-color: #4f46e5;
+}
+
+/* ===== 浅色主题补全：文件列表 / SpinBox / 按钮禁用态 ===== */
+QListWidget#file_list::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+}
+
+QListView::item, QListWidget::item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+}
+
+QListView::item:hover, QListWidget::item:hover {
+    background-color: #f1f5f9;
+}
+
+QSpinBox {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+QSpinBox:focus {
+    border-color: #4f46e5;
+}
+
+QPushButton:disabled {
+    background-color: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+}
+
+/* ===== 新增组件（功能1/2/3/4/13/14） ===== */
+QFrame#chip_bar {
+    background-color: transparent;
+}
+
+QPushButton#chip {
+    background-color: #ffffff;
+    color: #4f46e5;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 12px;
+}
+
+QPushButton#chip:hover {
+    background-color: #f1f5f9;
+    border-color: #4f46e5;
+}
+
+QLabel#warn_label {
+    color: #b45309;
+    font-size: 12px;
+    padding-right: 8px;
+}
+
+QPushButton#secondary {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+QPushButton#secondary:hover {
+    background-color: #f1f5f9;
+}
+
+QListWidget#related_list {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#related_list::item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#related_list::item:hover {
+    background-color: #f1f5f9;
+}
+
+QListWidget#related_list::item:selected {
+    background-color: #4f46e5;
+    color: #ffffff;
+}
+
+QListWidget#launcher_list {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#launcher_list::item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+}
+
+QListWidget#launcher_list::item:selected {
+    background-color: #4f46e5;
+    color: #ffffff;
+}
+
+/* ===== 新增组件（功能5/7/8/9/11/15） ===== */
+QPushButton#star_btn {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 16px;
+    color: #d97706;
+}
+
+QPushButton#star_btn:hover {
+    background-color: #f1f5f9;
+}
+
+QListWidget#source_list {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#source_list::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+}
+
+QListWidget#source_list::item:selected {
+    background-color: #eef2ff;
+    color: #1e1b4b;
+    border-color: #4f46e5;
+}
+
+QPlainTextEdit#exclude_edit {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 13px;
+}
+
+QPlainTextEdit#exclude_edit:focus {
+    border-color: #4f46e5;
+}
+
+/* 主题簇面板（紫色边框，与手动标签视觉隔离） */
+QLabel#cluster_section {
+    font-size: 14px;
+    font-weight: 600;
+    color: #7c3aed;
+    padding: 6px 0 2px 0;
+    letter-spacing: 0.5px;
+}
+
+QListWidget#cluster_list {
+    background-color: #faf5ff;
+    color: #1a1a2e;
+    border: 1px solid #7c3aed;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#cluster_list::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#cluster_list::item:hover {
+    background-color: #f3e8ff;
+}
+
+QListWidget#cluster_list::item:selected {
+    background-color: #ede9fe;
+    color: #1e1b4b;
+    border-color: #7c3aed;
+}
+
+QLabel#batch_count {
+    color: #7c3aed;
+    font-weight: 600;
+}
+
+/* 库概览仪表盘 */
+QFrame#stat_card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+QLabel#stat_title {
+    color: #64748b;
+    font-size: 12px;
+}
+
+QLabel#stat_value {
+    color: #1a1a2e;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+QLabel#dash_section {
+    font-size: 14px;
+    font-weight: 600;
+    color: #7c3aed;
+    padding: 4px 0 2px 0;
+}
+
+QFrame#dash_block {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+QLabel#dash_key {
+    color: #64748b;
+    font-size: 13px;
+}
+
+QLabel#dash_val {
+    color: #1a1a2e;
+    font-size: 13px;
+}
+
+/* ===== 新增组件（P2-6 链接图谱 / P2-12 重复检测） ===== */
+/* 链接图谱画布（QGraphicsView） */
+QGraphicsView#link_graph {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background-color: #f8f9fa;
+}
+
+/* 出链 / 入链 列表 */
+QListWidget#link_list {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#link_list::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#link_list::item:hover {
+    background-color: #f1f5f9;
+}
+
+QListWidget#link_list::item:selected {
+    background-color: #4f46e5;
+    color: #ffffff;
+}
+
+/* 链接图谱 / 入出链 小标题（紫色系，与簇 #7c3aed 协调） */
+QLabel#link_section {
+    font-size: 13px;
+    font-weight: 600;
+    color: #7c3aed;
+    padding: 4px 0 2px 0;
+}
+
+/* 重复检测列表 */
+QListWidget#dup_list {
+    background-color: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#dup_list::item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 2px 4px;
+    border: 1px solid transparent;
+}
+
+QListWidget#dup_list::item:hover {
+    background-color: #f1f5f9;
+}
+
+QListWidget#dup_list::item:selected {
+    background-color: #4f46e5;
+    color: #ffffff;
+}
+
+/* 重复检测阈值下拉 */
+QComboBox#dup_threshold {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    font-weight: 600;
+    color: #7c3aed;
+}
+
+QComboBox#dup_threshold:hover {
     border-color: #4f46e5;
 }
 """

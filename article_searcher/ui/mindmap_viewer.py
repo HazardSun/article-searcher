@@ -175,6 +175,10 @@ class MindMapConnection(QGraphicsItem):
         painter.drawPath(path)
 
 
+# 场景节点上限：防止极端结果集生成过多图形项导致渲染卡顿
+_MAX_NODES = 300
+
+
 class MindMapViewer(QWidget):
     """思维导图查看器"""
 
@@ -185,7 +189,32 @@ class MindMapViewer(QWidget):
         self._root_item = None
         self._all_nodes = []
         self._all_connections = []
+        self._theme = "dark"
         self._setup_ui()
+
+    def set_theme(self, theme: str):
+        """跟随主窗口切换明暗主题"""
+        self._theme = theme if theme in ("dark", "light") else "dark"
+        if self._scene is None or self._view is None:
+            return
+        if self._theme == "light":
+            self._scene.setBackgroundBrush(QColor(248, 249, 250))
+            self._view.setStyleSheet("""
+                QGraphicsView {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                    background-color: #f8f9fa;
+                }
+            """)
+        else:
+            self._scene.setBackgroundBrush(QColor(18, 18, 24))
+            self._view.setStyleSheet("""
+                QGraphicsView {
+                    border: 1px solid #2a2a35;
+                    border-radius: 12px;
+                    background-color: #121218;
+                }
+            """)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -203,15 +232,20 @@ class MindMapViewer(QWidget):
 
         zoom_in_btn = QPushButton("+")
         zoom_in_btn.setFixedWidth(32)
+        zoom_in_btn.setToolTip("放大")
+        zoom_in_btn.setAccessibleName("放大")
         zoom_in_btn.clicked.connect(self._zoom_in)
         toolbar.addWidget(zoom_in_btn)
 
         zoom_out_btn = QPushButton("-")
         zoom_out_btn.setFixedWidth(32)
+        zoom_out_btn.setToolTip("缩小")
+        zoom_out_btn.setAccessibleName("缩小")
         zoom_out_btn.clicked.connect(self._zoom_out)
         toolbar.addWidget(zoom_out_btn)
 
         fit_btn = QPushButton("适应")
+        fit_btn.setToolTip("适应窗口")
         fit_btn.clicked.connect(self._fit_view)
         toolbar.addWidget(fit_btn)
 
@@ -257,6 +291,10 @@ class MindMapViewer(QWidget):
         self._all_nodes.append(self._root_item)
 
         self._layout_children(self._root_item, root_node)
+        if len(self._all_nodes) >= _MAX_NODES:
+            self.title_label.setToolTip(
+                f"节点过多，已截断至 {_MAX_NODES} 个以保证流畅渲染"
+            )
 
         self.title_label.setText(f"思维导图 - {root_node.label}")
         self._fit_view()
@@ -290,6 +328,8 @@ class MindMapViewer(QWidget):
             start_angle = -math.pi / 2 - (child_count - 1) * angle_step / 2
 
             for i, child_data in enumerate(children):
+                if len(self._all_nodes) >= _MAX_NODES:
+                    return
                 angle = start_angle + i * angle_step
                 distance = 180 if child_data.level <= 2 else 140
 
@@ -317,6 +357,8 @@ class MindMapViewer(QWidget):
         start_angle = -math.pi / 2
 
         for i, child_data in enumerate(children):
+            if len(self._all_nodes) >= _MAX_NODES:
+                return
             angle = start_angle + i * angle_step
             x = parent_item.x() + math.cos(angle) * radius
             y = parent_item.y() + math.sin(angle) * radius
@@ -351,6 +393,8 @@ class MindMapViewer(QWidget):
         distance = 160
 
         for i, child_data in enumerate(children):
+            if len(self._all_nodes) >= _MAX_NODES:
+                return
             angle = start_angle + i * angle_step if child_count > 1 else parent_angle
 
             x = parent_item.x() + math.cos(angle) * distance

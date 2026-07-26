@@ -43,29 +43,47 @@ class TextChunk:
     metadata: dict = field(default_factory=dict)
 
 
+# Markdown 系列扩展名（大小写不敏感匹配）
+MARKDOWN_EXTENSIONS = {'.md', '.markdown', '.mdown', '.mkd', '.mdx', '.mdwn'}
+SUPPORTED_EXTENSIONS = MARKDOWN_EXTENSIONS | {'.html', '.htm', '.txt', '.pdf', '.docx'}
+
+
 class FileScanner:
     """文件扫描器 - 递归扫描指定目录中的 MD、HTML、TXT、PDF、DOCX 文件"""
 
-    SUPPORTED_EXTENSIONS = {'.md', '.html', '.htm', '.txt', '.pdf', '.docx'}
+    SUPPORTED_EXTENSIONS = SUPPORTED_EXTENSIONS
 
     def __init__(self):
         self.scanned_files: List[FileMetadata] = []
 
-    def scan_directory(self, directory: str) -> List[FileMetadata]:
-        """递归扫描目录，返回所有支持格式的文件元数据"""
+    def scan_directory(self, directory: str, exclude_patterns: List[str] = None) -> List[FileMetadata]:
+        """递归扫描目录，返回所有支持格式的文件元数据。
+
+        exclude_patterns：fnmatch glob 列表（如 [".git", "node_modules", "*.tmp"]），
+        在扫描期即跳过匹配文件（相对 directory 解释、大小写不敏感，逻辑与
+        core.multisource.path_matches_exclude 一致）。不传则行为不变（向后兼容）。
+        """
         self.scanned_files = []
         root_path = Path(directory)
 
         if not root_path.exists():
             raise FileNotFoundError(f"目录不存在: {directory}")
 
+        exclude = list(exclude_patterns or [])
         for ext in self.SUPPORTED_EXTENSIONS:
             for file_path in root_path.rglob(f'*{ext}'):
                 if file_path.is_file():
+                    if exclude and self._matches_exclude(str(file_path), str(root_path), exclude):
+                        continue
                     meta = self._extract_metadata(file_path)
                     self.scanned_files.append(meta)
 
         return self.scanned_files
+
+    @staticmethod
+    def _matches_exclude(file_path: str, directory: str, patterns: List[str]) -> bool:
+        from core.multisource import path_matches_exclude
+        return path_matches_exclude(file_path, directory, patterns)
 
     def _extract_metadata(self, file_path: Path) -> FileMetadata:
         """提取单个文件的元数据"""
@@ -73,11 +91,13 @@ class FileScanner:
         md5 = self._compute_md5(file_path)
 
         ext = file_path.suffix
-        if ext in ('.pdf', '.docx'):
+        if ext.lower() in ('.pdf', '.docx'):
             title = self._extract_title_binary(file_path, ext)
             content = ""
         else:
-            content = file_path.read_text(encoding='utf-8', errors='ignore')
+            # 仅读取前 64KB 用于提取标题，避免大文件整篇读入内存
+            raw = file_path.read_text(encoding='utf-8', errors='ignore')
+            content = raw[:65536]
             title = self._extract_title(content, ext)
 
         return FileMetadata(
@@ -89,6 +109,10 @@ class FileScanner:
             modified_time=stat.st_mtime,
             title=title
         )
+
+    def extract_metadata(self, file_path) -> "FileMetadata":
+        """公开的文件元数据采集接口（供 engine 重建单文件索引使用）"""
+        return self._extract_metadata(Path(file_path))
 
     @staticmethod
     def _compute_md5(file_path: Path) -> str:
@@ -102,14 +126,17 @@ class FileScanner:
     @staticmethod
     def _extract_title(content: str, extension: str) -> str:
         """从文本文件内容中提取标题"""
-        if extension in ('.md',):
+        if extension.lower() in MARKDOWN_EXTENSIONS:
             lines = content.split('\n')
             for line in lines[:20]:
                 stripped = line.strip()
                 if stripped.startswith('# '):
                     return stripped[2:].strip()
         elif extension in ('.html', '.htm'):
-            soup = BeautifulSoup(content, 'lxml')
+            try:
+                soup = BeautifulSoup(content, 'lxml')
+            except Exception:
+                soup = BeautifulSoup(content, 'html.parser')
             title_tag = soup.find('title')
             if title_tag and title_tag.get_text(strip=True):
                 return title_tag.get_text(strip=True)

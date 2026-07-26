@@ -1,0 +1,38 @@
+sequenceDiagram
+    actor User
+    participant MW as MainWindow
+    participant TF as TagFilterWidget
+    participant QP as query_parser
+    participant Eng as ArticleSearchEngine
+    participant RL as SearchResultList
+
+    Note over User,TF: 左栏多选标签 + AND/OR（P0-3，依赖 P1-1）
+    User->>TF: 勾选 tags + 选 AND/OR
+    TF->>MW: tags_selected(tags, op)
+    MW->>MW: _pending_tag_parsed = build_tag_filter_parsed(tags, op)
+
+    User->>MW: 输入查询 + 回车
+    MW->>MW: _perform_search()
+    MW->>QP: parse_query(text) → text_parsed
+    MW->>QP: combine_parsed(text_parsed, _pending_tag_parsed)
+    QP-->>MW: combined ParsedQuery(expr, has_boolean)
+    MW->>Eng: search(parsed=combined)  [后台 SearchWorker]
+    Eng->>Eng: parsed.has_boolean?
+    alt has_boolean == False（简单交集 / 旧路径）
+        Eng->>Eng: 旧扁平路径：_resolve_allowed_files(tag∩path) + 检索 + exclude_terms
+    else has_boolean == True（布尔 / 新路径）
+        Eng->>Eng: _eval_tag_path_expr(expr) → allowed_files（并/差/分组）
+        Eng->>Eng: 检索(clean_query=正项拼接, filter_metadata=allowed)
+        Eng->>Eng: _eval_text_bool(results, expr) 内容级 AND/OR/NOT 后过滤
+    end
+    Eng-->>MW: results (List[dict])
+    MW->>RL: display_results(results, group_mode)
+    RL->>RL: 按 GroupMode 渲染（FLAT/BY_FILE/BY_TAG/BY_SOURCE）
+    RL->>MW: item_selected(result) 用户点击
+    MW->>MW: _on_result_selected → 文档查看器
+
+    Note over User,MW: P0-1 应用内帮助 / 语法速查
+    User->>MW: 点 ? 按钮 / 按 ? 键
+    MW->>MW: _open_help()
+    MW->>MW: HelpOverlay(SYNTAX_CHEATSHEET).exec()
+    MW-->>User: 浮层展示 tag:/path:/-/"短语" 与组合示例

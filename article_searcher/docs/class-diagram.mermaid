@@ -1,0 +1,108 @@
+classDiagram
+    class ParsedQuery {
+        +str clean_query
+        +List~str~ tag_filters
+        +List~str~ path_filters
+        +List~str~ exclude_terms
+        +str phrase
+        +bool is_valid
+        +str warn
+        +BoolExpr expr
+        +bool has_boolean
+    }
+
+    class BoolExpr {
+        <<abstract>>
+    }
+    class TagNode {
+        +str tag
+        +bool negated
+    }
+    class PathNode {
+        +str pattern
+        +bool negated
+    }
+    class TermNode {
+        +str text
+        +bool negated
+    }
+    class NotNode {
+        +BoolExpr child
+    }
+    class AndNode {
+        +List~BoolExpr~ children
+    }
+    class OrNode {
+        +List~BoolExpr~ children
+    }
+
+    class GroupMode {
+        <<enum>>
+        FLAT
+        BY_FILE
+        BY_TAG
+        BY_SOURCE
+    }
+
+    class ArticleSearchEngine {
+        +search(query, top_k, tag_filter, mode, path_filter, exclude_terms, parsed) List~dict~
+        -_resolve_allowed_files(tag_filters, path_filters) Optional~set~
+        -_eval_bool_path(parsed, top_k, mode) List~dict~
+        -_eval_tag_path_expr(node) Optional~set~
+        -_eval_text_bool(results, node) List~dict~
+    }
+
+    class TagFilterWidget {
+        +pyqtSignal tags_selected(list, str)
+        +pyqtSignal tag_selected(str)
+        +update_tags(tags)
+        +set_op(op)
+        +selected_tags() List~str~
+        +selected_op() str
+    }
+
+    class SearchResultList {
+        +pyqtSignal item_selected(dict)
+        +display_results(results, group_mode)
+        +set_group_mode(mode)
+    }
+
+    class FileGroupCard {
+        +best_result dict
+        +expand_toggled()
+    }
+
+    class HelpOverlay {
+        +str SYNTAX_CHEATSHEET
+        +showEvent()
+    }
+
+    class MainWindow {
+        +_perform_search()
+        +_on_tag_selected(tags, op)
+        +_open_help()
+    }
+
+    BoolExpr <|-- TagNode
+    BoolExpr <|-- PathNode
+    BoolExpr <|-- TermNode
+    BoolExpr <|-- NotNode
+    BoolExpr <|-- AndNode
+    BoolExpr <|-- OrNode
+    AndNode "1" *-- "0..*" BoolExpr : children
+    OrNode "1" *-- "0..*" BoolExpr : children
+    NotNode "1" *-- "1" BoolExpr : child
+    ParsedQuery "1" *-- "0..1" BoolExpr : expr
+
+    parse_query ..> ParsedQuery : creates
+    build_tag_filter_parsed ..> ParsedQuery : creates
+    combine_parsed ..> ParsedQuery : merges
+    ArticleSearchEngine ..> ParsedQuery : consumes
+    ArticleSearchEngine ..> BoolExpr : evaluates
+
+    MainWindow ..> TagFilterWidget : connects tags_selected
+    MainWindow ..> SearchResultList : set_group_mode
+    MainWindow ..> HelpOverlay : opens
+    MainWindow ..> ParsedQuery : combine_parsed
+    SearchResultList ..> GroupMode : renders by
+    SearchResultList ..> FileGroupCard : uses for BY_FILE

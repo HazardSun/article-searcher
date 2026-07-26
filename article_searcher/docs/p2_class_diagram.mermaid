@@ -1,0 +1,92 @@
+classDiagram
+    class LinkGraphBuilder {
+        +build(engine) LinkGraph
+        +extract_links(text, file_path) List~ExtractedLink~
+        +resolve_link(source_path, raw, engine) Optional~str~
+    }
+    class ExtractedLink {
+        +source_path: str
+        +target_raw: str
+        +target_resolved: Optional~str~
+        +link_type: str
+        +line: int
+        +context: str
+    }
+    class LinkGraph {
+        +nodes: Dict~str, LinkNode~
+        +edges: List~LinkEdge~
+        +incoming: Dict~str, List~str~~
+    }
+    class LinkNode {
+        +path: str
+        +title: str
+        +kind: str
+    }
+    class LinkEdge {
+        +source: str
+        +target: str
+        +link_type: str
+        +line: int
+    }
+    class DuplicateDetector {
+        +find_duplicate_pairs(engine, threshold) List~DuplicatePair~
+    }
+    class DuplicatePair {
+        +file_a: str
+        +file_b: str
+        +similarity: float
+    }
+    class ArticleSearchEngine {
+        +build_link_graph() LinkGraph
+        +find_duplicate_pairs(threshold) List~DuplicatePair~
+        +get_indexed_files() Dict
+        +get_file_content(path) str
+        +sources: List~Source~
+    }
+    class LinkGraphViewer {
+        +display_graph(graph)
+        +set_theme(theme)
+        +highlight_neighbors(path)
+        +node_clicked: pyqtSignal(str)
+    }
+    class LinkGraphPanel {
+        +load()
+        +highlight_for_file(path)
+        +link_jump: pyqtSignal(str)
+    }
+    class LinkGraphWorker {
+        +finished: pyqtSignal(LinkGraph)
+        +error: pyqtSignal(str)
+    }
+    class DuplicateDialog {
+        +pair_selected: pyqtSignal(str,str)
+    }
+    class DuplicateDetectWorker {
+        +progress: pyqtSignal(int,int,str)
+        +finished: pyqtSignal(list)
+        +error: pyqtSignal(str)
+    }
+    class MainWindow {
+        +_on_node_jumped(path)
+        +_on_dup_pair_selected(a,b)
+        +_invalidate_link_cache()
+    }
+
+    LinkGraphBuilder ..> ExtractedLink : produces
+    LinkGraphBuilder ..> LinkGraph : builds
+    LinkGraph *-- LinkNode
+    LinkGraph *-- LinkEdge
+    LinkGraphBuilder ..> ArticleSearchEngine : uses
+    ArticleSearchEngine ..> LinkGraphBuilder : delegates(build_link_graph)
+    ArticleSearchEngine ..> DuplicateDetector : delegates(find_duplicate_pairs)
+    DuplicateDetector ..> DuplicatePair : produces
+    LinkGraphPanel o-- LinkGraphViewer
+    LinkGraphPanel o-- LinkGraphWorker
+    LinkGraphWorker ..> LinkGraphBuilder : calls build
+    LinkGraphViewer ..> LinkNode : draws
+    LinkGraphViewer ..> LinkEdge : draws
+    DuplicateDialog o-- DuplicateDetectWorker
+    DuplicateDetectWorker ..> DuplicateDetector : calls find_duplicate_pairs
+    LinkGraphPanel ..> MainWindow : link_jump
+    DuplicateDialog ..> MainWindow : pair_selected
+    MainWindow ..> LinkGraphPanel : highlight_for_file

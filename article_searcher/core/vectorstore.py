@@ -9,6 +9,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
+import numpy as np
 import chromadb
 from chromadb.config import Settings
 
@@ -134,6 +135,86 @@ class VectorStore:
         search_results.sort(key=lambda x: x['similarity'], reverse=True)
         return search_results
 
+    def get_file_vector(self, file_path: str) -> Optional[np.ndarray]:
+        """取该文件所有 chunk 向量，均值池化为文件级向量。
+
+        返回 (dim,) 的 numpy 数组；文件不存在或无向量时返回 None。
+        均值池化对 bge 类归一化向量稳定（见设计 §8⑤）。
+        """
+        try:
+            res = self.collection.get(
+                where={"file_path": file_path},
+                include=["embeddings"],
+            )
+        except Exception as e:
+            logger.warning("get_file_vector 读取向量失败: %s", e)
+            return None
+
+        ids = res.get("ids") or []
+        embs = res.get("embeddings") or []
+        if not ids or embs is None or len(embs) == 0:
+            return None
+        try:
+            arr = np.array(embs, dtype=float)
+        except Exception:
+            return None
+        if arr.size == 0:
+            return None
+        # 均值池化（axis=0），保持与单向量同形
+        return arr.mean(axis=0)
+
+    def query_similar(self, file_path: str, top_k: int = 5) -> List[dict]:
+        """文件级近邻：用文件向量 query → 按 file_path 聚合（取最相似 chunk 的相似度）
+        → 排除自身 → 取 top_k。
+
+        返回每文件一条记录（取该文件内相似度最高的 chunk 作为代表）：
+            {"file_path", "metadata", "content", "chunk_id", "distance", "similarity"}
+        """
+        fv = self.get_file_vector(file_path)
+        if fv is None:
+            return []
+
+        n_results = max(top_k * 5, 30)
+        try:
+            res = self.collection.query(
+                query_embeddings=[fv.tolist()],
+                n_results=n_results,
+                include=["documents", "metadatas", "distances"],
+            )
+        except Exception as e:
+            logger.warning("query_similar 检索失败: %s", e)
+            return []
+
+        if not res.get("ids") or not res["ids"][0]:
+            return []
+
+        # 按 file_path 聚合：保留相似度最高（距离最小）的 chunk
+        best: Dict[str, dict] = {}
+        ids0 = res["ids"][0]
+        docs0 = res["documents"][0]
+        meta0 = res["metadatas"][0]
+        dist0 = res["distances"][0]
+        for i, cid in enumerate(ids0):
+            meta = meta0[i] or {}
+            fp = meta.get("file_path", "")
+            if not fp or fp == file_path:
+                continue  # 排除自身
+            dist = dist0[i]
+            sim = 1.0 - dist
+            entry = best.get(fp)
+            if entry is None or sim > entry["similarity"]:
+                best[fp] = {
+                    "file_path": fp,
+                    "metadata": meta,
+                    "content": docs0[i],
+                    "chunk_id": cid,
+                    "distance": dist,
+                    "similarity": sim,
+                }
+
+        items = sorted(best.values(), key=lambda x: x["similarity"], reverse=True)[:top_k]
+        return items
+
     def delete_by_file(self, file_path: str):
         """删除指定文件的所有切片"""
         self.collection.delete(
@@ -145,9 +226,60 @@ class VectorStore:
         """获取已索引的文件列表"""
         return self._index_meta.get('files', {})
 
+    def set_file_md5(self, file_path: str, md5: str):
+        """记录已索引文件的 MD5，用于增量更新判断"""
+        entry = self._index_meta['files'].setdefault(file_path, {})
+        entry['md5'] = md5
+        self._save_index_meta()
+
+    def get_file_md5(self, file_path: str) -> Optional[str]:
+        """读取已索引文件的 MD5（未记录则返回 None）"""
+        return self._index_meta.get('files', {}).get(file_path, {}).get('md5')
+
+    def get_all_md5s(self) -> Dict[str, str]:
+        """返回全部已索引文件的 MD5 映射 {file_path: md5}（用于增量判断）"""
+        return {
+            fp: info.get('md5')
+            for fp, info in self._index_meta.get('files', {}).items()
+        }
+
+    def get_embedding_dim(self) -> Optional[int]:
+        """读取已索引向量维度（用于模型切换后的兼容性判断）"""
+        return self._index_meta.get('embedding_dim')
+
+    def set_embedding_dim(self, dim: int):
+        """记录当前索引的向量维度"""
+        if dim and self._index_meta.get('embedding_dim') != dim:
+            self._index_meta['embedding_dim'] = dim
+            self._save_index_meta()
+
     def get_chunk_count(self) -> int:
         """获取当前数据库中的切片总数"""
         return self.collection.count()
+
+    def get_chunks_by_files(self, file_paths: set) -> List[dict]:
+        """按 file_path 列举匹配文件的所有 chunk（不依赖 query 向量）。
+
+        用于"空查询 + 标签/路径过滤"的浏览模式：返回这些文件对应的全部 chunk，
+        每条形如 {"id", "content", "metadata"}。file_paths 为空时返回 []。
+        """
+        if not file_paths:
+            return []
+        try:
+            res = self.collection.get(
+                where={"file_path": {"$in": list(file_paths)}},
+                include=["documents", "metadatas"],
+            )
+        except Exception as e:
+            logger.warning("get_chunks_by_files 读取失败: %s", e)
+            return []
+        ids = res.get("ids") or []
+        docs = res.get("documents") or []
+        metas = res.get("metadatas") or []
+        return [
+            {"id": ids[i], "content": docs[i], "metadata": metas[i] or {}}
+            for i in range(len(ids))
+        ]
 
     def _chunk_to_metadata(self, chunk: TextChunk) -> dict:
         """将 TextChunk 转换为 ChromaDB 兼容的元数据格式"""

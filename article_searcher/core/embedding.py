@@ -1,100 +1,26 @@
+"""
+本地 Embedding 引擎
+统一调度 NPU / GPU(DirectML/CUDA) / CPU：
+- 主路径：ONNX Runtime（自动选择 NPU/DML/CUDA/OpenVINO/CPU 中首个可用后端）
+- 回退路径：sentence-transformers（当 ONNX 导出或加载失败时）
+
+关键修复（性能 / 卡死）：
+- 模型加载改为「懒加载」：构造时不再同步创建 ONNX/DML 会话（避免启动即在 GUI 线程
+  长时间阻塞白屏）；首次 encode / 显式 preload() 时才在调用方线程加载。
+- 用锁串行化 encode 与设备/模型切换，消除并发推理争用与 set_device 把引擎置空导致的
+  AttributeError 竞态。
+"""
+
 import os
 import logging
+import threading
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
-import psutil
+from .device_manager import DeviceManager, DeviceInfo
+from .onnx_engine import OnnxEmbeddingEngine
 
 logger = logging.getLogger(__name__)
-
-
-class HardwareDetector:
-
-    @staticmethod
-    def detect() -> dict:
-        info = {
-            'cpu_cores': psutil.cpu_count(logical=True),
-            'cpu_physical': psutil.cpu_count(logical=False),
-            'total_memory_gb': round(psutil.virtual_memory().total / (1024**3), 1),
-            'available_memory_gb': round(psutil.virtual_memory().available / (1024**3), 1),
-            'device': 'cpu',
-            'acceleration': 'none',
-            'gpu_name': '',
-            'gpu_devices': [],
-            'available_devices': ['cpu'],
-        }
-
-        cuda_devices = HardwareDetector._detect_cuda_devices()
-        dml_devices = HardwareDetector._detect_directml_devices()
-
-        all_gpus = cuda_devices + dml_devices
-        info['gpu_devices'] = all_gpus
-
-        available = ['cpu']
-        for gpu in all_gpus:
-            available.append(gpu['key'])
-        info['available_devices'] = available
-
-        npu = HardwareDetector._detect_npu()
-        if npu:
-            info['available_devices'].append('npu')
-
-        if cuda_devices:
-            info['device'] = cuda_devices[0]['key']
-            info['gpu_name'] = cuda_devices[0]['name']
-            info['acceleration'] = 'gpu'
-        elif dml_devices:
-            info['device'] = dml_devices[0]['key']
-            info['gpu_name'] = dml_devices[0]['name']
-            info['acceleration'] = 'gpu'
-
-        return info
-
-    @staticmethod
-    def _detect_cuda_devices() -> list:
-        devices = []
-        try:
-            import torch
-            if not torch.cuda.is_available():
-                return devices
-            count = torch.cuda.device_count()
-            for i in range(count):
-                name = torch.cuda.get_device_name(i)
-                devices.append({'key': 'cuda', 'name': name, 'index': i, 'type': 'cuda'})
-                logger.info(f"CUDA device {i}: {name}")
-        except Exception:
-            pass
-        return devices
-
-    @staticmethod
-    def _detect_directml_devices() -> list:
-        devices = []
-        try:
-            import torch_directml
-            count = torch_directml.device_count()
-            for i in range(count):
-                name = torch_directml.device_name(i).strip().rstrip('\x00').strip()
-                devices.append({'key': f'directml:{i}', 'name': name, 'index': i, 'type': 'directml'})
-                logger.info(f"DirectML device {i}: {name}")
-        except ImportError:
-            logger.info("torch_directml not installed")
-        except Exception as e:
-            logger.debug(f"DirectML detection failed: {e}")
-        return devices
-
-    @staticmethod
-    def _detect_npu() -> bool:
-        try:
-            import subprocess
-            r = subprocess.run(
-                ['powershell', '-Command',
-                 'Get-PnpDevice | Where-Object { $_.FriendlyName -match \"NPU|Compute Accelerator\" } | Select-Object -ExpandProperty Status'],
-                capture_output=True, text=True, timeout=10,
-            )
-            return 'OK' in r.stdout
-        except Exception:
-            pass
-        return False
 
 
 class EmbeddingEngine:
@@ -102,164 +28,203 @@ class EmbeddingEngine:
     DEFAULT_MODEL = "BAAI/bge-small-zh-v1.5"
     FALLBACK_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-    def __init__(self, model_name: str = None, device: str = None, cache_dir: str = None):
+    def __init__(
+        self,
+        model_name: str = None,
+        device: str = None,
+        cache_dir: str = None,
+        batch_size: int = 32,
+        priority: str = None,
+    ):
         self.model_name = model_name or self.DEFAULT_MODEL
         self.cache_dir = cache_dir or os.path.join(
             os.path.expanduser("~"), ".cache", "article_searcher", "models"
         )
-        self._model = None
-        self._onnx_engine = None
-        self._device = device or 'auto'
-        self._directml_device_index = 0
-        self.hardware_info = HardwareDetector.detect()
+        self._batch_size = batch_size
 
-        if self._device == 'auto':
-            self._device = self.hardware_info['device']
+        self._device_manager = DeviceManager(priority=priority) if priority else DeviceManager()
+        # 兼容旧调用方（main.py / ui）读取 hardware_info
+        self.hardware_info = self._device_manager.to_status()
 
-        self._actual_device = self._device
+        self._requested = device or "auto"
+        self._resolved: Optional[DeviceInfo] = None
+        self._onnx_engine: Optional[OnnxEmbeddingEngine] = None
+        self._st_model = None
+        self._actual_device: Optional[str] = None
+
+        # 懒加载：构造时只标记需要加载，真正创建会话推迟到首次 encode / preload()
+        self._reload_needed = True
+        # 必须用可重入锁 RLock：encode() 持锁后会调用 _ensure_loaded()，而后者
+        # 内部也要加同一把锁；普通 Lock 不可重入，会导致同线程二次加锁死锁。
+        self._lock = threading.RLock()
+
         os.makedirs(self.cache_dir, exist_ok=True)
 
+    # ------------------------------------------------------------------ #
+    # 设备解析与加载
+    # ------------------------------------------------------------------ #
+    def _resolve_device(self, requested: str) -> DeviceInfo:
+        if requested in (None, "auto", "recommended"):
+            return self._device_manager.recommended()
+        dev = self._device_manager.get(requested)
+        return dev or self._device_manager.recommended()
+
+    def _ensure_loaded(self):
+        """在锁内保证会话已就绪（懒加载核心）。"""
+        with self._lock:
+            if self._reload_needed or (self._onnx_engine is None and self._st_model is None):
+                self._resolve_and_load()
+                self._reload_needed = False
+
+    def preload(self):
+        """显式触发一次加载（应在后台线程调用，避免阻塞 GUI）。"""
+        self._ensure_loaded()
+
     def set_device(self, device: str):
-        if device == self._device and (self._model is not None or self._onnx_engine is not None):
-            return
+        """切换运行设备；标记下次编码时重建会话（不再同步阻塞）。"""
+        with self._lock:
+            self._requested = device
+            self._onnx_engine = None
+            self._st_model = None
+            self._resolved = None
+            self._actual_device = None
+            self._reload_needed = True
+        self.hardware_info = self._device_manager.to_status()
 
-        self._directml_device_index = 0
-        if device == 'auto':
-            self._device = self.hardware_info['device']
-        elif device.startswith('directml:'):
-            try:
-                self._directml_device_index = int(device.split(':', 1)[1])
-            except (ValueError, IndexError):
-                self._directml_device_index = 0
-            self._device = device
-        elif device not in self.hardware_info.get('available_devices', ['cpu']):
-            self._device = self.hardware_info['device']
-        else:
-            self._device = device
+    def set_model(self, model_name: str):
+        """切换 Embedding 模型；标记下次编码时重建会话（不再同步阻塞）。"""
+        with self._lock:
+            self.model_name = model_name
+            self._onnx_engine = None
+            self._st_model = None
+            self._resolved = None
+            self._actual_device = None
+            self._reload_needed = True
+        self.hardware_info = self._device_manager.to_status()
 
-        self._model = None
-        self._onnx_engine = None
-        self._actual_device = None
+    def _resolve_and_load(self):
+        self._resolved = self._resolve_device(self._requested)
+        self._load()
 
-    @property
-    def device(self) -> str:
-        return self._device
-
-    @property
-    def actual_device(self) -> str:
-        return self._actual_device or self._device
-
-    @property
-    def model(self):
-        if self._device == 'npu':
-            if self._onnx_engine is None:
-                self._load_onnx_engine()
-            return self._onnx_engine
-        if self._model is None:
-            self._load_model()
-        return self._model
-
-    def _load_onnx_engine(self):
-        from .onnx_engine import OnnxEmbeddingEngine
-        logger.info(f"Loading ONNX model: {self.model_name} on NPU (device_id=1)")
-        engine = OnnxEmbeddingEngine(self.model_name, self.cache_dir, device_id=1)
+    def _load(self):
+        dev = self._resolved
+        # 主路径：ONNX（统一多硬件后端，基于 onnxruntime DML/CPU，不依赖 torch）
         try:
-            engine._dimension = 512
-            engine.ensure_loaded()
-            actual = engine._session.get_providers()[0] if engine._session else ''
-            if 'DML' in actual:
-                self._onnx_engine = engine
-                self._actual_device = 'npu (DirectML)'
-                logger.info(f"Model loaded on NPU: {actual}")
-                return
-        except Exception:
-            pass
-        logger.warning("NPU unavailable, falling back to GPU via sentence-transformers")
-        first_dml = next(
-            (g['key'] for g in self.hardware_info.get('gpu_devices', []) if g['type'] == 'directml'),
-            None
-        )
-        self._device = first_dml or 'cpu'
-        self._onnx_engine = None
-        self._actual_device = None
-        self._load_model()
-
-    def _load_model(self):
-        logger.info(f"Loading model: {self.model_name} on {self._device}")
-        try:
-            from sentence_transformers import SentenceTransformer
-            if self._device == 'cuda':
-                device = 'cuda'
-                self._actual_device = 'cuda'
-            elif self._device and (self._device.startswith('directml:') or self._device == 'directml'):
-                import torch_directml
-                dml_idx = self._directml_device_index
-                device = torch_directml.device(dml_idx)
-                gpu_name = self.hardware_info.get('gpu_devices', [])
-                gpu_name = next(
-                    (g['name'] for g in gpu_name if g['type'] == 'directml' and g['index'] == dml_idx),
-                    f'DirectML #{dml_idx}'
-                )
-                self._actual_device = f'directml (GPU {dml_idx}: {gpu_name})'
-            else:
-                device = 'cpu'
-                self._actual_device = 'cpu'
-
-            self._model = SentenceTransformer(
-                self.model_name, cache_folder=self.cache_dir, device=device
+            self._onnx_engine = OnnxEmbeddingEngine(
+                self.model_name, self.cache_dir, dev,
+                self._device_manager, batch_size=self._batch_size,
             )
-            logger.info(f"Model loaded on {self._actual_device}")
+            self._onnx_engine.ensure_loaded()
+            self._actual_device = f"{dev.label} [{self._onnx_engine.actual_provider}]"
+            self._st_model = None
+            logger.info("Embedding 使用 ONNX 后端: %s", self._actual_device)
+            return
         except Exception as e:
-            logger.warning(f"Failed to load on {self._device}: {e}. Falling back to CPU.")
-            try:
-                from sentence_transformers import SentenceTransformer
-                self._model = SentenceTransformer(
-                    self.FALLBACK_MODEL, cache_folder=self.cache_dir, device='cpu'
-                )
-            except Exception as e2:
-                logger.error(f"Fallback model also failed: {e2}")
-                raise
-            self._actual_device = 'cpu'
-            self._device = 'cpu'
+            # 不再回退 sentence-transformers：该路径依赖 torch，而本机 torch 导入会
+            # 原生段错误（无法被 Python 捕获），回退只会让进程崩溃。直接抛出明确错误。
+            raise RuntimeError(
+                f"ONNX Embedding 引擎加载失败: {e}。已禁用 sentence-transformers 回退"
+                f"（依赖 torch，本机不可用）。"
+            ) from e
 
-    def encode(self, texts: List[str], batch_size: int = 32, show_progress: bool = False) -> np.ndarray:
+    # ------------------------------------------------------------------ #
+    # 编码（线程安全：串行化所有推理与切换）
+    # ------------------------------------------------------------------ #
+    def encode(
+        self,
+        texts: List[str],
+        batch_size: int = None,
+        show_progress: bool = False,
+    ) -> np.ndarray:
         if not texts:
             return np.array([])
         filtered = [t if t.strip() else " " for t in texts]
-        eng = self.model
-        if self._onnx_engine is not None:
-            return eng.encode(filtered)
-        return eng.encode(
-            filtered, batch_size=batch_size, show_progress_bar=show_progress,
-            normalize_embeddings=True, convert_to_numpy=True,
-        )
+
+        # 持锁期间完成「确保加载 + 推理」，串行化避免并发会话争用
+        with self._lock:
+            self._ensure_loaded()
+            if self._onnx_engine is not None:
+                return self._onnx_engine.encode(
+                    filtered, batch_size=batch_size or self._batch_size
+                )
+            if self._st_model is not None:
+                return self._st_model.encode(
+                    filtered,
+                    batch_size=batch_size or self._batch_size,
+                    show_progress_bar=show_progress,
+                    normalize_embeddings=True,
+                    convert_to_numpy=True,
+                )
+        raise RuntimeError("Embedding 引擎未能加载（ONNX 与 sentence-transformers 均失败）")
 
     def encode_single(self, text: str) -> np.ndarray:
         return self.encode([text])[0]
 
+    # ------------------------------------------------------------------ #
+    # 属性 / 状态
+    # ------------------------------------------------------------------ #
+    @property
+    def device(self) -> str:
+        return self._requested
+
+    @property
+    def actual_device(self) -> str:
+        return self._actual_device or (self._resolved.label if self._resolved else "cpu")
+
+    @property
+    def backend(self) -> str:
+        return "onnx" if self._onnx_engine is not None else "sentence-transformers"
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._onnx_engine is not None or self._st_model is not None
+
     @property
     def dimension(self) -> int:
-        if self._onnx_engine is not None:
-            return self._onnx_engine.dimension
-        if self._model is not None:
-            try:
-                return self._model.get_embedding_dimension()
-            except AttributeError:
-                return self._model.get_sentence_embedding_dimension()
+        # 懒加载下，未加载时 _onnx_engine 为空会返回 0，导致 set_model 误判维度。
+        # 在锁内触发加载后再读，保证维度始终准确（调用方为后台线程，不会阻塞 GUI）。
+        with self._lock:
+            self._ensure_loaded()
+            if self._onnx_engine is not None:
+                return self._onnx_engine.dimension
+            if self._st_model is not None:
+                try:
+                    return self._st_model.get_embedding_dimension()
+                except AttributeError:
+                    return self._st_model.get_sentence_embedding_dimension()
         return 0
 
     @property
     def available_devices(self) -> List[str]:
-        return self.hardware_info.get('available_devices', ['cpu'])
+        return self._device_manager.keys()
 
-    def get_status_info(self) -> dict:
-        actual = self._actual_device or self._device
-        dim = self.dimension
+    @property
+    def devices(self) -> List[DeviceInfo]:
+        return self._device_manager.devices
+
+    @property
+    def recommended_device(self) -> str:
+        return self._device_manager.recommended().key
+
+    def get_status_info(self) -> Dict[str, Any]:
+        # 注意：这里用「已加载才读」的安全方式取维度，避免状态刷新（GUI 线程）
+        # 触发模型加载导致白屏。维度精确值在首次编码后自然就绪。
+        if self._onnx_engine is not None:
+            dim = self._onnx_engine.dimension
+        elif self._st_model is not None:
+            try:
+                dim = self._st_model.get_embedding_dimension()
+            except AttributeError:
+                dim = self._st_model.get_sentence_embedding_dimension()
+        else:
+            dim = 0
         return {
-            'model': self.model_name,
-            'device': self._device,
-            'actual_device': actual,
-            'dimension': dim,
-            'hardware': self.hardware_info,
-            'available_devices': self.hardware_info.get('available_devices', ['cpu']),
+            "model": self.model_name,
+            "device": self._requested,
+            "actual_device": self.actual_device,
+            "backend": self.backend,
+            "dimension": dim,
+            "hardware": self.hardware_info,
+            "available_devices": self.available_devices,
+            "recommended_device": self.recommended_device,
         }

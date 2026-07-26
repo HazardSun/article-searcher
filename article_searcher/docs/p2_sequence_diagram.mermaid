@@ -1,0 +1,49 @@
+sequenceDiagram
+    participant U as 用户
+    participant MW as MainWindow
+    participant P as LinkGraphPanel
+    participant W as LinkGraphWorker
+    participant B as LinkGraphBuilder
+    participant E as Engine
+    participant V as LinkGraphViewer
+
+    Note over U,MW: === P2-6 跨文件链接图谱 ===
+    U->>MW: 点击右栏"链接图谱"Tab
+    MW->>P: load()
+    P->>W: start()
+    W->>B: build(engine)
+    loop 每篇 markdown（多源）
+        B->>E: get_indexed_files / get_file_content / sources
+        B->>B: extract_links + resolve_link(按源根映射)
+    end
+    B-->>W: LinkGraph
+    W-->>P: finished(graph)
+    P->>V: display_graph(graph)
+    Note over MW,P: 打开/选中某文章时
+    MW->>P: highlight_for_file(path)
+    P->>V: 高亮邻居 + 填充"本文引用"列表
+    U->>V: 点击节点
+    V->>P: node_clicked(path)
+    P->>MW: link_jump(path)
+    MW->>MW: _show_file_in_viewer(path)
+
+    Note over U,MW: === P2-12 近似/重复文章检测 ===
+    participant D as DuplicateDialog
+    participant WD as DuplicateDetectWorker
+    participant DD as DuplicateDetector
+    participant VS as VectorStore
+    U->>MW: 点击顶栏"重复检测"
+    MW->>D: 打开对话框
+    U->>D: 选阈值 + "开始检测"
+    D->>WD: start()
+    WD->>DD: find_duplicate_pairs(engine, threshold)
+    loop 每篇已索引文件
+        DD->>VS: get_file_vector(file_path)   %% 不调 encode
+    end
+    DD->>DD: 余弦相似度(分块) 收集 sim≥threshold 的 (i<j) 对
+    DD-->>WD: List[DuplicatePair]
+    WD-->>D: finished(pairs)
+    D->>D: 渲染列表(文件名 + 相似度%)
+    U->>D: 点击某相似对
+    D->>MW: pair_selected(file_a, file_b)
+    MW->>MW: _show_file_in_viewer(选中篇)
