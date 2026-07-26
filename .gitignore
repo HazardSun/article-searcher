@@ -39,3 +39,10 @@ Desktop.ini
 venv/
 .venv/
 article_searcher/venv/
+
+# Diagnostics & scratch (not part of the app)
+*.log
+article_searcher/nul
+article_searcher/measure_startup.py
+article_searcher/verify_*.py
+.opencode/
